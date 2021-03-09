@@ -1,3 +1,4 @@
+import 'package:firebase_ml_vision/firebase_ml_vision.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
@@ -21,10 +22,12 @@ class _MyHomePageState extends State<MyHomePage> {
   CameraController controller;
   bool isBusy = false;
   String result = "";
+  BarcodeDetector labeler;
 
   @override
   void initState() {
     super.initState();
+    labeler = FirebaseVision.instance.barcodeDetector();
   }
 
   initializeCamera() async {
@@ -34,11 +37,7 @@ class _MyHomePageState extends State<MyHomePage> {
         return;
       }
       controller.startImageStream((image) => {
-            if (!isBusy) {
-              isBusy = true,
-              img = image,
-              doBarcodeScanning()
-            }
+            if (!isBusy) {isBusy = true, img = image, doBarcodeScanning()}
           });
     });
   }
@@ -51,9 +50,42 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   doBarcodeScanning() async {
-    isBusy = false;
-    setState(() {
-    });
+    print("in scanning method");
+    ScannerUtils.detect(
+      image: img,
+      detectInImage: labeler.detectInImage,
+    ).then(
+      (dynamic results) {
+        print("result");
+        result = "";
+        if (results is List<Barcode>) {
+          List<Barcode> labels = results;
+          setState(() {
+            for (Barcode barcode in labels) {
+              final BarcodeValueType valueType = barcode.valueType;
+              result += valueType.toString() + "\n";
+              switch (valueType) {
+                case BarcodeValueType.wifi:
+                  final String ssid = barcode.wifi.ssid;
+                  final String password = barcode.wifi.password;
+                  final BarcodeWiFiEncryptionType type =
+                      barcode.wifi.encryptionType;
+                  result += ssid + "\n" + password;
+                  break;
+                case BarcodeValueType.url:
+                  final String title = barcode.url.title;
+                  final String url = barcode.url.url;
+                  result += title + "\n" + url;
+                  break;
+                case BarcodeValueType.email:
+                  result += barcode.email.body;
+                  break;
+              }
+            }
+          });
+        }
+      },
+    ).whenComplete(() => isBusy = false);
   }
 
   @override
